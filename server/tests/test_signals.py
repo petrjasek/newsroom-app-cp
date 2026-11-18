@@ -5,6 +5,7 @@ import responses
 import cp.signals as signals
 
 from datetime import datetime, timedelta
+from quart import Quart
 from responses import matchers
 from werkzeug.exceptions import HTTPException
 
@@ -152,6 +153,45 @@ async def test_cem_notification_on_user_changes(app):
         )
 
         await signals.on_user_deleted(user)
+
+
+async def test_cem_update_ignores_nested_fields_from_unvalidated_update(
+    mocker, monkeypatch
+):
+    monkeypatch.setattr(
+        UserResourceModel, "model_resource_name", "users", raising=False
+    )
+    app = Quart(__name__)
+    app.config.update(
+        CEM_URL="https://example.com", CEM_APIKEY="somekey", CEM_PLATFORM="Test"
+    )
+    mocker.patch("cp.signals.user_auth_is_gip", return_value=True)
+    user = UserResourceModel(
+        first_name="Foo",
+        last_name="Bar",
+        email="foo@example.com",
+        company=bson.ObjectId(),
+    )
+    updates = {"notification_schedule": {"timezone": "UTC"}}
+    updated = user.model_copy(update=updates)
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(
+            responses.PATCH,
+            "https://example.com",
+            match=[
+                matchers.json_params_matcher(
+                    {
+                        "object_id": user.email,
+                        "company": str(user.company),
+                        "type": "update",
+                        "platform": "Test",
+                    }
+                ),
+            ],
+        )
+        async with app.app_context():
+            await signals.on_user_updated(updated, updates)
 
 
 async def test_cem_notification_for_non_google_auth(app, mocker):

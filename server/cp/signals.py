@@ -50,22 +50,20 @@ def copy_correction_to_body_html(item: Dict[str, Any]) -> None:
 
 async def on_user_created(user: UserResourceModel) -> None:
     if await user_auth_is_gip(user):
-        send_notification("new", user.to_dict())
+        send_notification("new", email=user.email, company=user.company)
 
 
 async def on_user_updated(
     user: UserResourceModel, updates: Optional[Dict[str, Any]] = None
 ) -> None:
     if await user_auth_is_gip(user):
-        if updates and updates.get("password"):
-            send_notification("password", user.to_dict())
-        else:
-            send_notification("update", user.to_dict())
+        event = "password" if updates and updates.get("password") else "update"
+        send_notification(event, email=user.email, company=user.company)
 
 
 async def on_user_deleted(user: UserResourceModel) -> None:
     if await user_auth_is_gip(user):
-        send_notification("delete", user.to_dict())
+        send_notification("delete", email=user.email, company=user.company)
 
 
 async def on_push(item: Dict[str, Any]) -> None:
